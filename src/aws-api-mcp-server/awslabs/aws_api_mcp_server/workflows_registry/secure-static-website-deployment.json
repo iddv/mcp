@@ -1,0 +1,155 @@
+{
+  "name": "secure_static_website_deployment",
+  "short_description": "Deploy static website securely to S3 with CloudFront OAC, proper security settings, and custom domain support",
+  "description": "Secure greenfield deployment using S3 with private access, CloudFront with Origin Access Control, SSL certificate with validation, and comprehensive error handling. Creates everything from scratch including S3 bucket, CloudFront distribution, SSL certificate, and Route53 configuration.",
+  "steps": [
+    {
+      "name": "create_s3_bucket",
+      "description": "Create S3 bucket for private hosting. Use REST API endpoint, not website hosting, for better security with CloudFront OAC. Generate unique bucket name with random suffix.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "command": "aws s3api create-bucket --bucket ${website_name}-${random_suffix} --region ${region} --create-bucket-configuration LocationConstraint=${region}",
+        "error_handling": "If bucket exists, check if we own it before proceeding",
+        "website_name": "Use provided website name or derive from directory name",
+        "random_suffix": "Generate random suffix to ensure bucket uniqueness"
+      }
+    },
+    {
+      "name": "block_public_access",
+      "description": "Enable S3 Block Public Access settings for security. Keep bucket private - CloudFront OAC will provide controlled access.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "command": "aws s3api put-public-access-block --bucket ${bucket_name} --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true",
+        "bucket_name": "Use bucket name from previous step"
+      }
+    },
+    {
+      "name": "upload_website_files",
+      "description": "Upload website files to private S3 bucket. Set appropriate content types and caching headers. Exclude development files and directories.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "command": "aws s3 sync . s3://${bucket_name} --exclude '*.git/*' --exclude 'node_modules/*' --exclude '*.md' --exclude 'package*.json' --cache-control 'max-age=31536000'",
+        "validation": "Verify index.html exists before upload",
+        "source_directory": "Current directory or specified build output directory"
+      }
+    },
+    {
+      "name": "create_origin_access_control",
+      "description": "Create CloudFront Origin Access Control for secure S3 access. This replaces the deprecated Origin Access Identity and provides better security.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "command": "aws cloudfront create-origin-access-control --origin-access-control-config Name=${website_name}-oac,Description='OAC for ${website_name}',OriginAccessControlOriginType=s3,SigningBehavior=always,SigningProtocol=sigv4"
+      }
+    },
+    {
+      "name": "request_ssl_certificate",
+      "description": "Request SSL certificate via ACM for custom domain if provided. Certificate must be in us-east-1 for CloudFront. Include both apex and www subdomain.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "command": "aws acm request-certificate --domain-name ${custom_domain} --subject-alternative-names www.${custom_domain} --validation-method DNS --region us-east-1",
+        "conditional": "Only execute if custom domain is provided",
+        "custom_domain": "Custom domain name if provided by user"
+      }
+    },
+    {
+      "name": "get_certificate_validation_records",
+      "description": "Get DNS validation records for SSL certificate. These need to be added to Route53 for certificate validation.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "command": "aws acm describe-certificate --certificate-arn ${certificate_arn} --region us-east-1",
+        "conditional": "Only execute if custom domain is provided",
+        "output": "Extract DNS validation records for Route53 setup",
+        "certificate_arn": "Use certificate ARN from previous step"
+      }
+    },
+    {
+      "name": "setup_route53_validation",
+      "description": "Add DNS validation records to Route53 for SSL certificate validation. Create hosted zone if it doesn't exist.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "command": "aws route53 change-resource-record-sets --hosted-zone-id ${hosted_zone_id} --change-batch file://validation-records.json",
+        "conditional": "Only execute if custom domain is provided",
+        "prerequisite": "Find or create hosted zone for domain",
+        "hosted_zone_id": "Find hosted zone ID for the domain"
+      }
+    },
+    {
+      "name": "wait_for_certificate_validation",
+      "description": "Wait for SSL certificate to be validated and issued. This can take several minutes depending on DNS propagation.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "command": "aws acm wait certificate-validated --certificate-arn ${certificate_arn} --region us-east-1",
+        "conditional": "Only execute if custom domain is provided",
+        "timeout": "Maximum 5 minutes wait",
+        "certificate_arn": "Use certificate ARN from request step"
+      }
+    },
+    {
+      "name": "create_cloudfront_distribution",
+      "description": "Create CloudFront distribution with Origin Access Control, proper caching, and security headers. Use S3 REST endpoint, not website endpoint.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "command": "aws cloudfront create-distribution --distribution-config file://cloudfront-config.json",
+        "origin_domain": "${bucket_name}.s3.${region}.amazonaws.com",
+        "origin_access_control_id": "Use OAC ID from step 4",
+        "default_root_object": "index.html",
+        "price_class": "PriceClass_100",
+        "certificate_arn": "Use from SSL certificate step if custom domain provided",
+        "aliases": "Include custom domain and www subdomain if provided"
+      }
+    },
+    {
+      "name": "update_s3_bucket_policy",
+      "description": "Create bucket policy that allows CloudFront OAC to access S3 objects. This is more secure than public bucket access.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "command": "aws s3api put-bucket-policy --bucket ${bucket_name} --policy file://oac-bucket-policy.json",
+        "policy_content": "Allow GetObject for CloudFront OAC only, deny direct public access",
+        "distribution_arn": "Use CloudFront distribution ARN from previous step"
+      }
+    },
+    {
+      "name": "create_route53_alias",
+      "description": "Create Route53 A record pointing custom domain to CloudFront distribution using alias record for better performance.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "command": "aws route53 change-resource-record-sets --hosted-zone-id ${hosted_zone_id} --change-batch file://alias-records.json",
+        "conditional": "Only execute if custom domain is provided",
+        "record_type": "A record with alias to CloudFront distribution",
+        "distribution_domain": "Use CloudFront distribution domain from previous step"
+      }
+    },
+    {
+      "name": "setup_error_pages",
+      "description": "Configure custom error pages in CloudFront for better user experience. Handle 404s and other errors gracefully, especially for SPAs.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "command": "aws cloudfront update-distribution --id ${distribution_id} --distribution-config file://error-pages-config.json",
+        "error_pages": "Configure 404 -> /404.html and 403 -> /index.html for SPA routing",
+        "distribution_id": "Use distribution ID from create step"
+      }
+    },
+    {
+      "name": "verify_deployment",
+      "description": "Verify deployment by testing all URLs and checking security headers. Ensure S3 bucket is not directly accessible and all security measures are working.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "command": "Test CloudFront URL, custom domain, and verify S3 security",
+        "tests": "Test CloudFront URL returns 200, verify S3 bucket returns 403 when accessed directly, check security headers",
+        "cloudfront_domain": "Use distribution domain from create step",
+        "custom_domain": "Test custom domain if configured"
+      }
+    },
+    {
+      "name": "output_deployment_summary",
+      "description": "Provide comprehensive deployment summary with all URLs, security verification, and next steps including DNS propagation times and maintenance recommendations.",
+      "use_tool": "call_aws",
+      "tool_parameter_hints": {
+        "outputs": "Display CloudFront URL, custom domain URL (if configured), security status, SSL status, and next steps",
+        "security_status": "Confirm S3 bucket private and CloudFront OAC enabled",
+        "ssl_status": "Confirm SSL certificate validated and applied",
+        "next_steps": "DNS propagation times, CI/CD setup recommendations, CloudWatch monitoring guidance"
+      }
+    }
+  ]
+} 

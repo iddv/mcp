@@ -1,0 +1,108 @@
+Set up Auto Scaling Groups (ASGs) for elasticity and high availability.
+Use ELB to distribute traffic across instances.
+Tag auto scaling groups
+Configure step and simple scaling policies for asg
+Attach a load balancer to ASG
+Set up dynamic scaling for auto scaling
+Set up monitoring for auto scaling instances
+Attach IAM roles to ec2 instances
+Limit access to /secure my ec2 instances
+Help me create security group for inbound and outbound traffic
+Limit IP ranges and port access to my ec2 instances
+Monitor traffic to my ec2 instances using vpc flow
+Patch my instances
+Attach EB volume to an EC2 instance
+Create EBS volume
+Create snapshots of EBS volume
+Detach EBS volume from a EC2 instance
+Enable EBs encryption
+Create route table for internal access only
+Configure routes for private subnets
+Design VPC endpoint and using multiple AZs
+Configure VPC to minimize network hops and latency
+Configure subnet to accommodate X instances
+associate subnets with route tables
+Launch Apache web server using an AMI
+Configure monitoring for my ec2 instances
+Deploy instances across multiple availability zones
+Launch a spot instance
+Run cost optimization checks for my ec2 instances
+Which of by EB volumes are underutilized
+Which ec2 instances contributed to 50% of the last month's bill
+Replicate AMI's across regions
+Configure SSM session manager for instance access
+Configure auto scaling with logs back up when terminating instances
+How do I export an ElastiCache for Redis backup to Amazon S3?
+Migrate Redis ElastiCache to a different region/account
+Configure Redis in cluster mode
+Configure Memcached
+Configure Redis/Memcached for write heavy loads
+Configure Redis/Memcached for read heavy loads
+Configure failover with multi-az for Redis/Memcached
+What commands are long running or blocking in my Redis instance
+Turn-off back ups
+Configure ElastiCache with serverless caching
+Update TTL for the ElastiCache
+Configure ElastiCache for high availability using replication groups
+Secure my Memcached by controlling access to trusted ec2/ECS/lambda
+Deploy ElastiCache in a security group
+Schedule an upgrade of Redis/Memcached version
+Configure Redis backup using RDB/AOF
+Configure reserved nodes with no upfront node type
+Connect RDS to EC2 instances
+Connect RDS to AWS Lambda
+Configure monitoring of RDS instances with CW performance insights
+Stream RDS/PostgreSQL, MySQL, Aurora logs to CW logs
+Set up dashboards for following metrics and alert me via Slack messages for high CPU, low storage, and connection spikes
+Configure AWS Secrets Manager for DB Credentials
+Connect RDS to Amazon S3
+Connect RDS to Glue/Athena via S3 export
+Connect RDS to ECS
+How to allow ECS task on farget to connect to a RDS
+Migrate RDS data using DMS with real-time/batch ETL to Parquet
+How to trigger rds workflows using Lambda and step functions
+Create a web server and RDS instance in a new VPC
+Trigger a backup with manual snapshot creation has occurred
+Monitor RDS instance CPU utilization. When it crosses 70% threshold add read replicas
+Monitor RDS instance CPU utilization. When it crosses 70% threshold, upgrade Aurora Serverless capacity
+My account was compromised. Help me re-instate my account
+Secure access to my S3 buckets with IAM and bucket policies
+Configure S3 bucket policies for cross-account access
+Configure S3 bucket policies for service X access
+I want to configure S3 buckets for least privilege
+Connect S3 with Lambda function for put object access
+How do I grant lambda execution role access to S3 bucket?
+How do I trigger a Lambda function when a S3 object is created
+How to I configure Glue Crawler to infer schema JSON/CSV/Parquet files in S3
+I want to build ETL pipelines to transform and load S3 data into RDS/Redshift.
+I want to connect S3 with Amazon Athena
+How do I query S3 data using SQL
+How do bulk load data from S3 into Redshift database
+How do I connect S3 with CloudFront
+How do I use S3 triggers to automate training jobs using SageMaker
+Help me configure S3 and SageMaker for storing datasets and model artifacts in S3
+How to grant execution role S3 access for input / output
+How do I configure S3 to store backups for RDS/DynamoDB using AWS Backup
+Configure S3 to S3 Glacier/ Glacier Deep Archive for long-term storage
+How do I use S3 Lifecycle policies to transition objects between S3 to IA to Glacier
+I want to scan for sensitive PII/credentials data in my S3 buckets
+I want to receive an alert when unauthorized access is detected and remediate automatically by remove public access
+I want to be notified in MS Teams channel when vulnerabilities in S3 infrastructure are detected
+I want to audit S3 compliance
+How do I automate object cleanup
+Help me monitor my S3 cost and usage for last one month
+Help configure cross-region replication for global access
+Help configure cross-region replication for disaster recovery
+Help me implement same region replication for compliance/backup purposes
+What settings are recommended for large uploads to S3 buckets
+How do I accelerate upload/download speeds globally
+How to enable settings where user pays for accessing datasets stored in S3
+Help me configure logging for S3
+Configure monitoring for S3 API calls using CloudTrail
+Configure monitoring dashboards for monitoring S3 buckets and send me notifications in Slack channel
+Help me cleanup old S3 versions
+Enable S3 versioning
+Enable encryption using customer managed key
+Enable encryption using Amazon managed key
+Help with creating bucket policy with default encryption required.
+Help me secure S3 buckets based on best practices
