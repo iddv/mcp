@@ -37,6 +37,7 @@ from .core.common.config import (
     TRANSPORT,
     WORKING_DIRECTORY,
 )
+from .code_mode import execute_aws_python as execute_aws_python_core
 from .core.common.errors import AwsApiMcpError, CommandValidationError
 from .core.common.helpers import get_requests_session, validate_aws_region
 from .core.common.models import (
@@ -311,6 +312,129 @@ async def call_aws_helper(
         raise
     except Exception as e:
         error_message = f'Error while executing the command: {str(e)}'
+        await ctx.error(error_message)
+        raise AwsApiMcpError(error_message)
+
+
+@server.tool(
+    name='execute_aws_python',
+    description="""Execute Python code with AWS operations in a sandboxed environment.
+
+    This tool allows you to write Python code that calls AWS operations directly using an `aws()` function.
+    Instead of making individual tool calls for each AWS operation, you can write code that:
+    1. Calls AWS operations using `aws("command")` - e.g., `aws("ec2 describe-instances")`
+    2. Processes responses with Python logic (loops, conditionals, data transformation)
+    3. Returns filtered/aggregated results
+
+    This approach reduces token usage and improves workflow efficiency for multi-step AWS operations.
+
+    Available functions in the sandbox:
+    - `aws(command: str)` - Execute AWS CLI command and return parsed JSON response
+    - `print(*args)` - Print output (captured and returned)
+
+    Available builtins:
+    - Type constructors: dict, list, set, tuple, str, int, float, bool
+    - Iteration: len, range, enumerate, zip, map, filter, sorted, reversed
+    - Utilities: any, all, sum, min, max, abs, round, pow
+    - Type checking: type, isinstance
+    - Exceptions: Exception, ValueError, TypeError, KeyError, IndexError, etc.
+
+    CRITICAL LIMITATIONS:
+    - NO IMPORTS: `import` statements are blocked. Do not use datetime, json, re, or any modules.
+    - NO FILE ACCESS: open(), os, pathlib are blocked
+    - NO NETWORK: Only aws() can make external calls
+    - OPERATION LIMIT: Maximum 50 AWS operations per execution. For large datasets, use pagination or sampling.
+
+    DATE/TIME HANDLING (since datetime is unavailable):
+    - AWS timestamps are ISO 8601 strings (e.g., "2025-01-15T10:30:00Z")
+    - Compare dates as strings: "2025-01-15" > "2025-01-01" works correctly
+    - Extract date parts with string slicing: timestamp[:10] gets "YYYY-MM-DD"
+    - For "last N days" queries, pass the cutoff date as a pre-calculated string
+
+    OUTPUT FORMATTING BEST PRACTICES:
+    - Use plain text output with print() - avoid markdown tables (they render poorly in terminals)
+    - Use simple formats: "Resource: value" or "- item" lists
+    - Keep output concise - summarize large datasets rather than listing everything
+    - Use separator lines (print("=" * 40)) for visual structure
+
+    BEST PRACTICES:
+    - Batch operations when possible (e.g., describe multiple resources in one call)
+    - Handle pagination for large result sets
+    - Use .get() with defaults to handle missing keys safely
+    - For operations on many resources, consider sampling first 10-20 items
+    - Store intermediate results in variables for reuse
+
+    Example:
+    ```python
+    # Get account info and S3 buckets in one execution
+    identity = aws("sts get-caller-identity")
+    buckets = aws("s3api list-buckets")
+
+    print(f"Account: {identity.get('Account')}")
+    print(f"Total buckets: {len(buckets.get('Buckets', []))}")
+
+    # List first 5 buckets
+    for b in buckets.get('Buckets', [])[:5]:
+        print(f"  - {b.get('Name')}")
+    ```
+
+    DRY RUN MODE:
+    When dry_run=True, the code is analyzed but AWS operations are NOT executed.
+    Use this to validate code syntax and see what operations would be performed.
+
+    Returns:
+        Dictionary with status, output, operations executed, and any errors.
+
+    DISPLAYING RESULTS:
+    The 'output' field contains pre-formatted text from print() statements.
+    Present this output to the user using whatever formatting best suits your environment
+    (plain text, markdown, tables, etc.). The output is designed to be human-readable as-is.
+    """,
+    annotations=ToolAnnotations(
+        title='Execute Python code with AWS operations',
+        readOnlyHint=READ_OPERATIONS_ONLY_MODE,
+        destructiveHint=not READ_OPERATIONS_ONLY_MODE,
+        openWorldHint=True,
+    ),
+)
+async def execute_aws_python(
+    code: Annotated[
+        str,
+        Field(
+            description='Python code to execute. Use aws("command") to call AWS CLI operations.',
+            max_length=50000,
+        ),
+    ],
+    ctx: Context,
+    dry_run: Annotated[
+        bool,
+        Field(
+            description='If True, analyze the code without executing AWS operations. '
+            'Returns analysis of operations that would be executed.',
+        ),
+    ] = False,
+) -> dict[str, Any]:
+    """Execute Python code with AWS operations in a sandboxed environment."""
+    logger.info('Executing AWS Python code (dry_run={})', dry_run)
+
+    async def aws_executor(command: str) -> Any:
+        """Execute AWS CLI command via call_aws_helper."""
+        return await call_aws_helper(
+            cli_command=f"aws {command}" if not command.startswith("aws ") else command,
+            ctx=ctx,
+            max_results=None,
+            credentials=None,
+        )
+
+    try:
+        result = await execute_aws_python_core(
+            code=code,
+            aws_executor=aws_executor,
+            dry_run=dry_run,
+        )
+        return result
+    except Exception as e:
+        error_message = f'Error executing Python code: {str(e)}'
         await ctx.error(error_message)
         raise AwsApiMcpError(error_message)
 

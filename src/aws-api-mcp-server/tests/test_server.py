@@ -985,3 +985,137 @@ async def test_call_aws_delegates_to_helper(mock_call_aws_helper):
         cli_command='aws s3api list-buckets', ctx=ctx, max_results=None, credentials=None
     )
     assert result == mock_response
+
+
+# Tests for execute_aws_python MCP tool integration
+
+
+@patch('awslabs.aws_api_mcp_server.server.execute_aws_python_core')
+async def test_execute_aws_python_success(mock_execute_core):
+    """Test execute_aws_python tool returns success for valid code."""
+    from awslabs.aws_api_mcp_server.server import execute_aws_python
+
+    mock_execute_core.return_value = {
+        "status": "success",
+        "output": "Found 3 running instances\n",
+        "operations": ["ec2 describe-instances"],
+        "execution_time": 1.23,
+    }
+
+    result = await execute_aws_python.fn(
+        code='instances = aws("ec2 describe-instances")\nprint(f"Found {len(instances)} instances")',
+        ctx=DummyCtx(),
+        dry_run=False,
+    )
+
+    assert result["status"] == "success"
+    assert "Found 3 running instances" in result["output"]
+    mock_execute_core.assert_called_once()
+
+
+@patch('awslabs.aws_api_mcp_server.server.execute_aws_python_core')
+async def test_execute_aws_python_dry_run(mock_execute_core):
+    """Test execute_aws_python tool in dry_run mode."""
+    from awslabs.aws_api_mcp_server.server import execute_aws_python
+
+    mock_execute_core.return_value = {
+        "status": "success",
+        "output": "",
+        "operations": ["ec2 describe-instances"],
+        "analysis": {
+            "operation_count": 1,
+            "warnings": [],
+            "valid": True,
+        },
+        "execution_time": 0.01,
+    }
+
+    result = await execute_aws_python.fn(
+        code='instances = aws("ec2 describe-instances")',
+        ctx=DummyCtx(),
+        dry_run=True,
+    )
+
+    assert result["status"] == "success"
+    assert "analysis" in result
+    assert result["analysis"]["valid"] is True
+    mock_execute_core.assert_called_once()
+    # Verify dry_run was passed
+    call_kwargs = mock_execute_core.call_args[1]
+    assert call_kwargs["dry_run"] is True
+
+
+@patch('awslabs.aws_api_mcp_server.server.execute_aws_python_core')
+async def test_execute_aws_python_validation_error(mock_execute_core):
+    """Test execute_aws_python tool returns validation error for invalid code."""
+    from awslabs.aws_api_mcp_server.server import execute_aws_python
+
+    mock_execute_core.return_value = {
+        "status": "validation_error",
+        "output": "",
+        "operations": [],
+        "error": "SyntaxError: invalid syntax (line 1)",
+        "execution_time": 0.001,
+    }
+
+    result = await execute_aws_python.fn(
+        code='invalid python code (',
+        ctx=DummyCtx(),
+        dry_run=False,
+    )
+
+    assert result["status"] == "validation_error"
+    assert "SyntaxError" in result["error"]
+
+
+@patch('awslabs.aws_api_mcp_server.server.execute_aws_python_core')
+async def test_execute_aws_python_security_error(mock_execute_core):
+    """Test execute_aws_python tool returns security error for restricted operations."""
+    from awslabs.aws_api_mcp_server.server import execute_aws_python
+
+    mock_execute_core.return_value = {
+        "status": "validation_error",
+        "output": "",
+        "operations": [],
+        "error": "Security error: import of 'os' module is not allowed",
+        "execution_time": 0.001,
+    }
+
+    result = await execute_aws_python.fn(
+        code='import os\nos.system("ls")',
+        ctx=DummyCtx(),
+        dry_run=False,
+    )
+
+    assert result["status"] == "validation_error"
+    assert "Security error" in result["error"]
+
+
+@patch('awslabs.aws_api_mcp_server.server.execute_aws_python_core')
+async def test_execute_aws_python_exception_handling(mock_execute_core):
+    """Test execute_aws_python tool handles exceptions properly."""
+    from awslabs.aws_api_mcp_server.server import execute_aws_python
+
+    mock_execute_core.side_effect = Exception("Unexpected error")
+
+    with pytest.raises(AwsApiMcpError) as exc_info:
+        await execute_aws_python.fn(
+            code='aws("ec2 describe-instances")',
+            ctx=DummyCtx(),
+            dry_run=False,
+        )
+
+    assert "Error executing Python code" in str(exc_info.value)
+
+
+async def test_execute_aws_python_tool_is_registered():
+    """Test that execute_aws_python tool is registered with the MCP server."""
+    from awslabs.aws_api_mcp_server.server import server
+
+    # Get all registered tools
+    tools = server._tool_manager._tools
+
+    # Check that execute_aws_python is registered
+    assert 'execute_aws_python' in tools
+    tool = tools['execute_aws_python']
+    assert tool is not None
